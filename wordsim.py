@@ -23,6 +23,7 @@ def generate_random_vocabulary():
 # and outputs a softmax distribution over the following actions in A.
 # Last layer is log softmax activation.
 
+# Have the agent forward-sample a sequence
 def agent_generate_word(g, policy, encoder):
     so_far = []
     while True:
@@ -33,6 +34,7 @@ def agent_generate_word(g, policy, encoder):
         if a is SENTINEL:
             return so_far
 
+# Get the log probability that the agent would produce a sequence
 def score_sequence(g, target, policy, encoder):
     so_far = []
     score = 0.0
