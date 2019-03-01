@@ -22,11 +22,14 @@ def agent_generate_word(g, policy, encoder):
     while True:
         m = encoder(so_far)
         a = policy(m, g)
+        so_far.append(a)
         if a is SENTINEL:
             return so_far
 
-def punishing_loss(x, y):
+def punishing_loss(x, y): 
     return x == y
+
+# Optimally the loss would be something like cross-entropy, 
 
 def train():
     vocabulary = generate_random_vocabulary()
