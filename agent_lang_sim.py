@@ -221,7 +221,7 @@ def agent_generate_word(batch_meanings, encoder, attn, attn_decoder):
       a = batch_a[i]
       if a == SENTINEL_ID:
         if(completed != None):
-          completed[g_idx] = t.LongTensor(so_far[g_idx]) #save completed sequence
+          completed[g_idx] = so_far[g_idx] #save completed sequence
         del so_far[g_idx]
       else:
         so_far[g_idx] += [a] #update sequences excluding completed
@@ -270,7 +270,7 @@ def train_joint(meanings,
     #seq_probs: dict w/ meaning g as key and probability of sequence produced as value
     
     g = list(produced.keys())[0]
-    g_distro = listener(produced[g], d_encoder, d_attn, d_attn_decoder).squeeze(0) #[G]
+    g_distro = listener(t.LongTensor(produced[g]), d_encoder, d_attn, d_attn_decoder).squeeze(0) #[G]
     loss -= seq_probs[g] * torch.log(g_distro)[g]
       
     
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 	produced, _ = agent_generate_word(batch_g, agent_encoder, agent_attn, agent_attn_decoder)
 
 	for g in range(20):
-	  g_distro = listener(produced[g], listener_encoder, listener_attn, listener_attn_decoder).squeeze(0) #[G]
+	  g_distro = listener(t.LongTensor(produced[g]), listener_encoder, listener_attn, listener_attn_decoder).squeeze(0) #[G]
 	  print(f"\nu|g={g} : {t.LongTensor(produced[g])}")
 	  print(f"p(g|u) : {g_distro[g]}\n")
 
