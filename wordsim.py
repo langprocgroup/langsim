@@ -9,6 +9,7 @@ import torch.nn.functional as F
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 import math, random
+from attentionRNN import *
 
 
 # parameters
@@ -48,24 +49,6 @@ def idx_one_hot(one_hots, dim = 1):
   '''
   return [t.item() for t in torch.argmax(one_hots, dim)]
 
-def update_so_far(batch_a:list, current_batch_meanings_idx:list, so_far:dict, completed:dict = None):
-  #updating so_far excluding completed sequences
-
-  new_batch_meanings_idx = []
-  
-  for i in range(len(current_batch_meanings_idx)):
-    g_idx = current_batch_meanings_idx[i]
-    a = batch_a[i]
-    if a == SENTINEL_ID:
-      if(completed != None):
-        completed[g_idx] = so_far[g_idx] #save completed sequence
-      del so_far[g_idx]
-    else:
-      so_far[g_idx] += [a] #update sequences excluding completed
-      new_batch_meanings_idx.append(g_idx)
-      
-  return new_batch_meanings_idx
-
 def generate_random_word():
     length = random.choice(range(1, MAX_WORD_LENGTH+1))
     word = [random.choice(PHONEMES) for _ in range(length)]
@@ -76,20 +59,19 @@ def generate_random_vocabulary():
     return {i:word for i, word in enumerate(words)}
 
 # Have the agent forward-sample a sequence
-def agent_generate_word(batch_meanings, one_of_k_length,  encoder, attn, attn_decoder, sample = True):
+def agent_generate_word(batch_meanings, encoder, attn, attn_decoder):
   '''
   :param batch_meanings:
-      one hot encodings of meanings in shape [B,V] where V is vocabulary size
-  :param one_of_k_length:
-      used to generate one hot encodings of meanings k = V - vocabulary size 
+      one hot encodings of meanings in shape [B,V] where V is vocabulary size 
   '''
   completed = {} #stores completed sequences as they are taken out of so_far
 
+  one_hot_dim = batch_meanings.size(1)
   batch_meaning_idx = idx_one_hot(batch_meanings)
   so_far = {g_idx:[] for g_idx in batch_meaning_idx} #stores seq as they are being generated
   
   current_batch_meanings_idx = [g_idx for g_idx in batch_meaning_idx] #updated by a == SENTINEL_ID
-  current_batch_meaning = one_hot(current_batch_meanings_idx, one_of_k_length)
+  current_batch_meaning = one_hot(current_batch_meanings_idx, one_hot_dim)
   
   while len(current_batch_meanings_idx) > 0:
     batch_g = t.FloatTensor(current_batch_meaning) #[B,G]
@@ -103,14 +85,24 @@ def agent_generate_word(batch_meanings, one_of_k_length,  encoder, attn, attn_de
     attn_weights = attn(outputs, batch_g)
     a_distro = attn_decoder(outputs, attn_weights, batch_g) #[B,P]
     a_distro = torch.distributions.Categorical(a_distro)
-    if(sample):
-      batch_a = a_distro.sample()
-    else:
-      batch_a = torch.argmax(a_distro.probs, 1)
+    batch_a = a_distro.sample()
     
     #update so_far & current batch idx
-    current_batch_meanings_idx = update_so_far(batch_a, current_batch_meanings_idx, so_far, completed) #updates so_far and returns new_batch_meanings
-    current_batch_meaning = one_hot(current_batch_meanings_idx, one_of_k_length)
+    new_batch_meanings_idx = []
+    
+    for i in range(len(current_batch_meanings_idx)):
+      g_idx = current_batch_meanings_idx[i]
+      a = batch_a[i]
+      if a == SENTINEL_ID:
+        if(completed != None):
+          completed[g_idx] = so_far[g_idx] #save completed sequence
+        del so_far[g_idx]
+      else:
+        so_far[g_idx] += [a] #update sequences excluding completed
+        new_batch_meanings_idx.append(g_idx)
+
+    current_batch_meanings_idx = new_batch_meanings_idx
+    current_batch_meaning = one_hot(current_batch_meanings_idx, one_hot_dim)
     
   return completed
 
@@ -197,7 +189,7 @@ def main():
     #init models
     encoder = EncoderRNN(input_size, embed_size, hidden_size, n_layers, dropout, bidirectional = True).to(device)
     attn = Attn(None, hidden_size, g_size = g_size).to(device)
-    attn_decoder = AttnDecoder([hidden_size,hidden_size,PHONEME_INVENTORY_SIZE], g_size, activation_fn = F.relu).to(device) #should we add more layers/make them bigger?
+    attn_decoder = AttnDecoder([hidden_size,hidden_size,PHONEME_INVENTORY_SIZE], g_size, activation_fn = torch.tanh).to(device) #should we add more layers/make them bigger?
     params = list(encoder.parameters()) + list(attn.parameters()) + list(attn_decoder.parameters())
     optimizer = torch.optim.Adam(params, lr = learning_rate, weight_decay = .0001)
 
@@ -218,7 +210,7 @@ def main():
 
     #training
     import time
-    n_epochs = 1000
+    n_epochs = 100
 
 
     start_time = time.time()
@@ -234,7 +226,7 @@ def main():
     incorrects = []
     corrects = []
 
-    produced = agent_generate_word(batch_g, len(vocabulary), encoder, attn, attn_decoder, sample = True)
+    produced = agent_generate_word(batch_g, encoder, attn, attn_decoder)
     produced = {g_idx:produced[g_idx] for g_idx in batch_g_idx}
 
     for g_idx in batch_g_idx:
