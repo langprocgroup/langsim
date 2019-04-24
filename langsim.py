@@ -158,6 +158,11 @@ def mt():
     return input, random.choice(range(k))
 
 
+# ff = langsim.SoftmaxFF(10, [20, 20, 20], 10, activation=nn.ReLU())
+# langsim.autoencode(ff, lambda: langsim.indices(10), -2, 10, lr=.01)
+
+
+
 # WOrks better for negative beta!!! ???? !!! ???
 def autoencode(ff, data, beta=1, batch_size=1, **hyperparams):
     opt = torch.optim.Adam(ff.parameters(), **hyperparams)
